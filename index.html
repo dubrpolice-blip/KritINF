@@ -789,6 +789,19 @@ svg.leaflet-image-layer.leaflet-interactive path {
   .pv .item .dtag{display:block;margin:.8mm 0 0 18px;font-size:11px;font-weight:700;color:#000}
   .pv .item .dtag span{display:inline-block;border:1.5px solid var(--gc,#000);border-left-width:4px;border-radius:3px;padding:0 4px;margin-right:3px}
   @media (max-width:760px){.duty textarea{font-size:16px}}
+  .bellbar a.bell{position:relative;text-align:center;font-size:16px;text-decoration:none;cursor:pointer}
+  #bellcnt{position:absolute;top:1px;right:0;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:#d92d20;color:#fff;font:700 10px/15px system-ui;box-sizing:border-box}
+  #logpanel{position:absolute;z-index:1100;left:50px;top:10px;width:min(360px,calc(100% - 64px));max-height:calc(100% - 20px);overflow:auto;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.3);font-size:13px;cursor:auto}
+  #logpanel .lh{display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:1}
+  #logpanel .lh b{flex:1}
+  .lg{display:flex;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line)}
+  .lg.new{background:var(--hover)}
+  .lg .ic{flex:none;width:18px;height:18px;border-radius:50%;color:#fff;font-size:12px;line-height:18px;text-align:center;font-weight:700}
+  .lg .ic.add{background:#039855}.lg .ic.del{background:#d92d20}.lg .ic.mod{background:#1570ef}
+  .lg .tx{flex:1;min-width:0;overflow-wrap:anywhere}
+  .lg .tm{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+  .lgnone{padding:14px;color:var(--muted)}
+  .pv #logpanel{display:none!important}
   #err{display:none;margin:8px 12px;padding:8px 10px;border-radius:8px;background:#fde8e8;color:#8a1c1c;border:1px solid #f1a5a5;font-size:12px;line-height:1.35}
 </style>
 </head>
@@ -905,7 +918,7 @@ const byId=id=>D.find(o=>o.id===id);
 const $=s=>document.querySelector(s);
 /* ===== СИНХРОНІЗАЦІЯ між пристроями (спільна база артефакту; без неї — як раніше, localStorage) ===== */
 const KR_MAPS={kr_cats_v1:"cats",kr_geo_v1:"geo",kr_manual_v1:"manual",kr_glists_v1:"glists"};
-const KR_ITEMS={kr_custom_v1:"custom"};
+const KR_ITEMS={kr_custom_v1:"custom",kr_log_v1:"log"};
 const KR_IDS={kr_del_v1:"del",kr_guard_v1:"guard"};
 const KR_ONE={kr_order_v1:"order"};
 const KR_SYNCED=Object.assign({},KR_MAPS,KR_ITEMS,KR_IDS,KR_ONE);
@@ -1150,6 +1163,7 @@ let custom=store.get("kr_custom_v1",[]);   // додані користувач�
 let nextId=Math.max(store.get("kr_next_v1",1000),...custom.map(o=>o.id+1));
 for(let i=D.length-1;i>=0;i--) if(deleted.includes(D[i].id)) D.splice(i,1);
 custom.forEach(o=>{o.addr=mkAddr(o);D.push(o)});
+let alog=store.get("kr_log_v1",[]);   // журнал змін
 let guard=store.get("kr_guard_v1",[]), glists=store.get("kr_glists_v1",{}), listMode="all", editDuty=false, dutyDraft="";   // списки охорони (наряди) + режим редагування складу
 const G_DEF="g1", G_COL=["#d92d20","#1570ef","#039855","#dd7c0a","#7a5af8","#0e9384","#c11574","#4e5ba6"];
 const gLists=()=>{
@@ -1184,6 +1198,73 @@ const topo=L.tileLayer(esri("World_Topo_Map"),{maxZoom:19,attribution:"Tiles © 
 const sat=L.tileLayer(esri("World_Imagery"),{maxZoom:19,attribution:"Tiles © Esri"});
 const lc=L.control.layers({"Вулиці":base,"Топографічна":topo,"Супутник":sat},null,{position:"topright"}).addTo(map);
 const layer=L.layerGroup().addTo(map);
+
+/* ===== журнал змін (дзвоник) ===== */
+const LOG_MAX=100;
+let logOpen=false, logSeenOpen=0;
+const devId=(()=>{try{let d=localStorage.getItem("kr_dev");if(!d){d=Math.random().toString(36).slice(2,10);localStorage.setItem("kr_dev",d)}return d}catch(e){return "x"}})();
+const getSeen=()=>{try{return +localStorage.getItem("kr_logseen")||0}catch(e){return 0}};
+const setSeen=v=>{try{localStorage.setItem("kr_logseen",String(v))}catch(e){}};
+const logUnread=()=>alog.filter(e=>e.d!==devId&&e.id>getSeen()).length;
+function logChange(k,m){
+  const id=Date.now()*1000+Math.floor(Math.random()*1000);
+  alog=alog.concat([{id,k,m:String(m).slice(0,300),d:devId}]).slice(-LOG_MAX);
+  store.set("kr_log_v1",alog);
+  if(logOpen) renderLog();
+  updBell();
+}
+function updBell(){
+  const b=document.getElementById("bellcnt"); if(!b) return;
+  const n=logOpen?0:logUnread(); b.hidden=!n; b.textContent=n>9?"9+":String(n);
+}
+function renderLog(){
+  const p=document.getElementById("logpanel"); if(!p) return;
+  if(logOpen) setSeen(Math.max(0,...alog.map(e=>e.id)));
+  p.innerHTML="";
+  const h=document.createElement("div"); h.className="lh";
+  const t=document.createElement("b"); t.textContent="🔔 Журнал змін"+(alog.length?" ("+alog.length+")":""); h.appendChild(t);
+  if(alog.length){
+    const c=document.createElement("button"); c.type="button"; c.className="chip"; c.textContent="Очистити";
+    c.onclick=()=>{if(!confirm("Очистити журнал змін?")) return; alog=[]; store.set("kr_log_v1",alog); renderLog(); updBell()};
+    h.appendChild(c);
+  }
+  const x=document.createElement("button"); x.type="button"; x.className="chip"; x.textContent="✕"; x.title="Закрити"; x.onclick=()=>toggleLog(false); h.appendChild(x);
+  p.appendChild(h);
+  if(!alog.length){const n=document.createElement("div"); n.className="lgnone"; n.textContent="Змін ще не внесено."; p.appendChild(n); return}
+  const ic={add:"＋",del:"−",mod:"✎"};
+  [...alog].sort((a,b)=>b.id-a.id).forEach(e=>{
+    const r=document.createElement("div"); r.className="lg"+(e.d!==devId&&e.id>logSeenOpen?" new":"");
+    const i=document.createElement("span"); i.className="ic "+(ic[e.k]?e.k:"mod"); i.textContent=ic[e.k]||"✎";
+    const w=document.createElement("div"); w.className="tx"; w.textContent=e.m;
+    const tm=document.createElement("span"); tm.className="tm";
+    tm.textContent=new Date(Math.floor(e.id/1000)).toLocaleString("uk-UA",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+    w.appendChild(tm); r.append(i,w); p.appendChild(r);
+  });
+}
+function toggleLog(force){
+  logOpen=force===undefined?!logOpen:!!force;
+  const p=document.getElementById("logpanel"); p.hidden=!logOpen;
+  if(logOpen){logSeenOpen=getSeen(); renderLog(); p.scrollTop=0}
+  updBell();
+}
+{
+  const bc=L.control({position:"topleft"});
+  bc.onAdd=()=>{
+    const d=L.DomUtil.create("div","leaflet-bar bellbar"), a=L.DomUtil.create("a","bell",d);
+    a.href="#"; a.title="Журнал змін"; a.setAttribute("role","button"); a.setAttribute("aria-label","Журнал змін");
+    a.innerHTML='🔔<span id="bellcnt" hidden></span>';
+    L.DomEvent.disableClickPropagation(d);
+    L.DomEvent.on(a,"click",e=>{L.DomEvent.preventDefault(e); toggleLog()});
+    return d;
+  };
+  bc.addTo(map);
+  const lp=document.createElement("div"); lp.id="logpanel"; lp.hidden=true;
+  map.getContainer().appendChild(lp);
+  L.DomEvent.disableClickPropagation(lp); L.DomEvent.disableScrollPropagation(lp);
+  map.on("click",()=>{if(logOpen) toggleLog(false)});
+  updBell();
+}
+
 
 function icon(o,approx){
   const c=CATS[o.cat].c, label=o.no;
@@ -1283,7 +1364,7 @@ function placeMarker(o){
   const pos=[o.pos[0]+same*0.00007,o.pos[1]+same*0.00007];
   const m=L.marker(pos,{icon:icon(o,o.approx),draggable:true,title:o.name}).bindPopup(()=>popup(o));
   m.on("click",()=>setActive(o.id,false));
-  m.on("dragend",()=>{const p=m.getLatLng();manual[o.id]={lat:p.lat,lon:p.lng};store.set("kr_manual_v1",manual);placeMarker(o);renderList();markers[o.id].openPopup()});
+  m.on("dragend",()=>{const p=m.getLatLng();manual[o.id]={lat:p.lat,lon:p.lng};store.set("kr_manual_v1",manual);logChange("mod","Змінено позицію маркера «"+o.name+"»");placeMarker(o);renderList();markers[o.id].openPopup()});
   markers[o.id]=m;
   if(visible(o)) layer.addLayer(m);
 }
@@ -1379,6 +1460,7 @@ function updGuardUI(){
 }
 function setGuard(l,id,on){
   if(on===inList(l,id)) return;
+  {const _o=byId(id), _d=gLists()[l]; if(_o&&_d) logChange(on?"add":"del","Об'єкт «"+_o.name+"» "+(on?"додано до наряду «":"прибрано з наряду «")+_d.n+"»")}
   guard=guard.filter(x=>x!==gTok(l,id)&&!(l===G_DEF&&x===id));
   if(on) guard.push(gTok(l,id));
   store.set("kr_guard_v1",guard);
@@ -1404,11 +1486,12 @@ function addGList(){
   glists=Object.assign({},glists,{[id]:{n:n.trim().slice(0,40),c:G_COL[Object.keys(glists).length%G_COL.length]}});
   store.set("kr_glists_v1",glists);
   listMode=id; editDuty=false; map.closePopup(); refresh(); fit();
-  setStatus("Створено список: "+n.trim());
+  logChange("add","Додано наряд «"+n.trim().slice(0,40)+"»");setStatus("Створено список: "+n.trim());
 }
 $("#gren").onclick=()=>{
   const d=gLists()[listMode]; if(!d) return;
   const n=prompt("Нова назва списку:",d.n); if(n===null||!n.trim()) return;
+  logChange("mod","Наряд «"+d.n+"» перейменовано на «"+n.trim().slice(0,40)+"»");
   gMat(); glists=Object.assign({},glists,{[listMode]:Object.assign({},glists[listMode],{n:n.trim().slice(0,40)})});
   store.set("kr_glists_v1",glists); refresh();
 };
@@ -1416,6 +1499,7 @@ $("#gdel").onclick=()=>{
   const l=listMode, d=gLists()[l]; if(!d) return;
   if(Object.keys(gLists()).length<2){alert("Має залишитися принаймні один список.");return}
   if(!confirm("Видалити список «"+d.n+"» ("+gCount(l)+" об'єктів)? Самі об'єкти залишаться.")) return;
+  logChange("del","Видалено наряд «"+d.n+"»");
   gMat(); const nl=Object.assign({},glists); delete nl[l]; glists=nl; store.set("kr_glists_v1",glists);
   guard=guard.filter(x=>!(typeof x==="string"&&x.startsWith(l+":"))&&!(l===G_DEF&&x===+x));
   store.set("kr_guard_v1",guard);
@@ -1456,6 +1540,8 @@ function startDutyEdit(){
 function saveDuty(){
   const l=listMode, d=gLists()[l]; if(!d) return;
   const people=dutyDraft.split(/\r?\n/).map(x=>x.replace(/\s+/g," ").trim().slice(0,200)).filter(Boolean);
+  {const old=gPeople(l), added=people.filter(p=>!old.includes(p)), removed=old.filter(p=>!people.includes(p));
+    if(added.length||removed.length) logChange("mod","Склад наряду «"+d.n+"»: "+[added.length?"додано "+added.join(", "):"",removed.length?"прибрано "+removed.join(", "):""].filter(Boolean).join("; "))}
   gMat(); glists=Object.assign({},glists,{[l]:Object.assign({},glists[l],{people})});
   store.set("kr_glists_v1",glists); editDuty=false; refresh();
   setStatus("Склад наряду «"+d.n+"» збережено: "+people.length);
@@ -1495,6 +1581,7 @@ $("#gcopy").onclick=async()=>{
 };
 $("#gclear").onclick=()=>{
   const l=listMode, d=gLists()[l]; if(!d||!gCount(l)||!confirm("Прибрати всі об'єкти зі списку «"+d.n+"»?")) return;
+  logChange("del","З наряду «"+d.n+"» прибрано всі об'єкти ("+gCount(l)+")");
   guard=guard.filter(x=>!(typeof x==="string"&&x.startsWith(l+":"))&&!(l===G_DEF&&x===+x));
   store.set("kr_guard_v1",guard); refresh();
 };
@@ -1519,7 +1606,7 @@ function setActive(id,fly){
 }
 map.on("click",e=>{
   if(pickId===null) return;
-  const o=byId(pickId); manual[o.id]={lat:e.latlng.lat,lon:e.latlng.lng};store.set("kr_manual_v1",manual);
+  const o=byId(pickId); manual[o.id]={lat:e.latlng.lat,lon:e.latlng.lng};store.set("kr_manual_v1",manual);logChange("mod","Вказано позицію на карті: «"+o.name+"»");
   pickId=null;document.body.classList.remove("pick");
   placeMarker(o);renderList();setStatus(`Готово: «${o.name}» розміщено`);
   markers[o.id].openPopup();
@@ -1565,10 +1652,11 @@ function delObj(id){
   }else{deleted.push(id);store.set("kr_del_v1",deleted)}
   if(pickId===id){pickId=null;document.body.classList.remove("pick")}
   if(activeId===id) activeId=null;
-  rebuild();setStatus(`Видалено: «${o.name}»`);
+  logChange("del","Видалено об'єкт «"+o.name+"»");rebuild();setStatus(`Видалено: «${o.name}»`);
 }
 $("#restore").onclick=()=>{
-  ORIG.filter(o=>deleted.includes(o.id)).forEach(o=>D.push(o));
+  const rs=ORIG.filter(o=>deleted.includes(o.id)); rs.forEach(o=>D.push(o));
+  if(rs.length) logChange("add","Відновлено об'єкти: "+rs.map(o=>"«"+o.name+"»").join(", "));
   applyOrder();
   deleted=[];store.set("kr_del_v1",deleted);
   rebuild();setStatus("Видалені об'єкти відновлено");
@@ -1599,7 +1687,7 @@ $("#form").onsubmit=e=>{
     else{
       catKey="u"+Date.now();
       CATS[catKey]={n:cn,c:$("#f_color").value||"#e11d8f"};
-      customCats[catKey]=CATS[catKey];store.set("kr_cats_v1",customCats);
+      customCats[catKey]=CATS[catKey];store.set("kr_cats_v1",customCats);logChange("add","Додано тип об'єктів «"+cn+"»");
       active.add(catKey);addChip(catKey,CATS[catKey]);
     }
     fillCats(catKey);
@@ -1609,6 +1697,7 @@ $("#form").onsubmit=e=>{
   o.addr=mkAddr(o);
   store.set("kr_next_v1",nextId);
   D.push(o);custom.push(o);saveCustom();
+  logChange("add","Додано об'єкт «"+o.name+"» ("+CATS[o.cat].n+")");
   active.add(o.cat);chipEls[o.cat].classList.remove("off");
   filterText="";$("#q").value="";
   rebuild();
@@ -1739,6 +1828,7 @@ function applyRemoteState(){
   manual=Object.assign({},SEED&&SEED.manual,store.get("kr_manual_v1",{}));
   deleted=store.get("kr_del_v1",[]);
   guard=store.get("kr_guard_v1",[]);
+  alog=store.get("kr_log_v1",[]); if(logOpen) renderLog(); updBell();
   glists=store.get("kr_glists_v1",{});
   if(listMode!=="all"&&!gLists()[listMode]) listMode="all";
   custom=store.get("kr_custom_v1",[]);
