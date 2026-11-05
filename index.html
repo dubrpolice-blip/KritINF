@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="uk">
 <head>
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Критична інфраструктура на території обслуговування ВП №1 Сарненського РВП</title>
@@ -982,11 +983,11 @@ function krOnSnap(snap){
   if(sync.loaded&&sync.canWrite&&!sync.pending.size&&!sync.flushing) krBadge("ok");
 }
 /* ===== Google Apps Script + Таблиця (працює в будь-якому браузері; налаштування — кнопка «☁ Синхронізація») ===== */
-const GS_URL_DEFAULT="";   // за бажанням вставте сюди адресу /exec — тоді вона діятиме на всіх пристроях, що відкрили цей файл
+const GS_URL_DEFAULT="https://script.google.com/macros/s/AKfycbw3fi6rIbeKIrwmcda1nZGaP9iaYU25RlpgNEvwjBQ2eEizkfJ6_OpgTPGCjrGAf6Q1Yw/exec";   // за бажанням вставте сюди адресу /exec — тоді вона діятиме на всіх пристроях, що відкрили цей файл
 const GS_KEY_DEFAULT="";
 function gsCfg(){
   let c=null; try{c=JSON.parse(localStorage.getItem("kr_gs_cfg")||"null")}catch(e){}
-  if(c&&typeof c.url==="string") return c.url?c:null;
+  if(c&&typeof c.url==="string"&&c.url.trim()) return c;
   return GS_URL_DEFAULT?{url:GS_URL_DEFAULT,key:GS_KEY_DEFAULT}:null;
 }
 async function gsReq(url,opt){
@@ -1076,11 +1077,11 @@ function krInitGS(cfg){
 {const st=document.getElementById("syncst"); if(st){st.style.cursor="pointer"; st.onclick=()=>alert("Синхронізація: "+(sync.gs?"Google Apps Script":"вимкнена")+"\nСтан: "+(KR_BADGE[sync.state]||[])[1]+(sync.lastErr?"\nОстання помилка: "+sync.lastErr:"")+(sync.gs?"\nАдреса: "+sync.gs.url:""))}}
 $("#gsbtn")&&($("#gsbtn").onclick=()=>{
   const c=gsCfg()||{};
-  const u=prompt("Адреса веб-застосунку Google Apps Script (закінчується на /exec).\nПорожнє поле — вимкнути синхронізацію:",c.url||"");
+  const u=prompt("Адреса веб-застосунку Google Apps Script (закінчується на /exec).\nПорожнє поле — повернути адресу, вшиту у файл:",c.url||"");
   if(u===null) return;
   let k=c.key||"";
   if(u.trim()){const kk=prompt("Ключ доступу (якщо задавали SECRET у скрипті; інакше залиште порожнім):",k); if(kk===null) return; k=kk.trim()}
-  try{localStorage.setItem("kr_gs_cfg",JSON.stringify({url:u.trim(),key:k}))}catch(e){alert("Браузер не дозволяє зберігати налаштування");return}
+  try{u.trim()?localStorage.setItem("kr_gs_cfg",JSON.stringify({url:u.trim(),key:k})):localStorage.removeItem("kr_gs_cfg")}catch(e){alert("Браузер не дозволяє зберігати налаштування");return}
   location.reload();
 });
 async function krInit(){
